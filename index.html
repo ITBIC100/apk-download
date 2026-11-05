@@ -225,6 +225,30 @@ body{
     z-index:10;
 }
 .toast.show{ transform:translate(-50%,0); }
+.toast.success{ background:rgba(22,140,80,.95); }
+.toast.error{ background:rgba(190,40,60,.95); }
+
+/* ===== PROGRESS DOWNLOAD ===== */
+.app-card{ position:relative; overflow:hidden; }
+.app-card.busy{ pointer-events:none; }
+.progress{
+    position:absolute;
+    left:0;
+    bottom:0;
+    height:3px;
+    width:0;
+    background:linear-gradient(90deg,#ff5db1,#31b7ff);
+    transition:width .2s linear;
+}
+.progress.indeterminate{
+    width:40%;
+    animation:slide 1.1s ease-in-out infinite;
+}
+@keyframes slide{
+    0%{ transform:translateX(-100%); }
+    100%{ transform:translateX(260%); }
+}
+.dl-btn.done{ background:#1c9b5c; box-shadow:0 4px 10px rgba(28,155,92,.35); }
 
 @media (prefers-reduced-motion: reduce){
     .time .colon{ animation:none; }
@@ -382,14 +406,30 @@ if (isInApp && isAndroid){
     });
 }
 
-/* ================= TOAST PETUNJUK ================= */
+/* ================= TOAST / NOTIFIKASI ================= */
 let toastTimer;
-function showToast(msg, ms){
+function showToast(msg, ms, type){
     const t = document.getElementById('toast');
     t.textContent = msg;
-    t.classList.add('show');
+    t.className = 'toast show' + (type ? ' ' + type : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), ms || 4000);
+    if (ms !== 0) toastTimer = setTimeout(() => t.classList.remove('show'), ms || 4000);
+}
+
+/* Notifikasi sistem (bar notifikasi HP / pojok layar laptop), jika diizinkan */
+function systemNotify(title, body){
+    try{
+        if ('Notification' in window && Notification.permission === 'granted'){
+            new Notification(title, { body: body });
+        }
+    }catch(e){ /* sebagian HP hanya mengizinkan lewat service worker; abaikan */ }
+}
+function askNotifyPermission(){
+    try{
+        if ('Notification' in window && Notification.permission === 'default'){
+            Notification.requestPermission();
+        }
+    }catch(e){}
 }
 
 /* ================= KARTU DOWNLOAD ================= */
@@ -399,12 +439,116 @@ function formatSize(bytes){
     return mb >= 1 ? mb.toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
 }
 
+function mimeFor(name){
+    if (/\.apk$/i.test(name)) return 'application/vnd.android.package-archive';
+    if (/\.rar$/i.test(name)) return 'application/vnd.rar';
+    return 'application/octet-stream';
+}
+
+function afterDoneHint(name){
+    return /\.apk$/i.test(name)
+        ? 'Buka file dari folder Download, lalu izinkan "Instal aplikasi tidak dikenal" bila diminta.'
+        : 'Ekstrak file dengan aplikasi seperti ZArchiver.';
+}
+
+/*
+  Download dengan pemantauan progres:
+  file diunduh oleh halaman (fetch), persentase ditampilkan di kartu,
+  lalu setelah 100% file disimpan ke HP dan muncul notifikasi "Download selesai".
+*/
+async function downloadWithProgress(card){
+    const href  = card.getAttribute('href');
+    const name  = card.getAttribute('download') || decodeURIComponent(href);
+    const sub   = card.querySelector('.app-sub');
+    const btn   = card.querySelector('.dl-btn');
+    const kind  = card.dataset.kind || 'File';
+    const oldSub = sub.textContent;
+
+    let bar = card.querySelector('.progress');
+    if (!bar){ bar = document.createElement('div'); bar.className = 'progress'; card.appendChild(bar); }
+
+    card.classList.add('busy');
+    btn.classList.remove('done');
+    btn.textContent = '…';
+    bar.style.width = '0';
+    sub.textContent = 'Menghubungkan…';
+    showToast('Mengunduh ' + name + '…', 0);
+
+    try{
+        const res = await fetch(href, { cache:'no-store' });
+        if (!res.ok) throw new Error('Server menjawab ' + res.status);
+
+        const total = Number(res.headers.get('content-length')) || 0;
+        let received = 0;
+        let blob;
+
+        if (res.body && res.body.getReader){
+            if (!total) bar.classList.add('indeterminate');
+            const reader = res.body.getReader();
+            const chunks = [];
+            while (true){
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (total){
+                    const pct = Math.min(100, Math.round(received / total * 100));
+                    bar.style.width = pct + '%';
+                    btn.textContent = pct + '%';
+                    btn.style.fontSize = '10px';
+                    sub.textContent = 'Mengunduh ' + formatSize(received) + ' / ' + formatSize(total);
+                } else {
+                    sub.textContent = 'Mengunduh ' + formatSize(received);
+                }
+            }
+            blob = new Blob(chunks, { type: mimeFor(name) });
+        } else {
+            const raw = await res.blob();
+            blob = new Blob([raw], { type: mimeFor(name) });
+        }
+
+        if (total && blob.size !== total) throw new Error('File tidak lengkap, coba lagi');
+
+        // Simpan file ke perangkat
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+        // Selesai
+        bar.classList.remove('indeterminate');
+        bar.style.width = '100%';
+        btn.classList.add('done');
+        btn.style.fontSize = '';
+        btn.textContent = '✓';
+        sub.textContent = kind + ' · ' + formatSize(blob.size) + ' · download selesai';
+        showToast('✓ Download selesai: ' + name + '. ' + afterDoneHint(name), 8000, 'success');
+        systemNotify('Download selesai', name + ' sudah tersimpan di HP.');
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    }catch(err){
+        bar.classList.remove('indeterminate');
+        bar.style.width = '0';
+        btn.style.fontSize = '';
+        btn.textContent = '↓';
+        sub.textContent = oldSub;
+        showToast('Download gagal: ' + err.message + '. Ketuk sekali lagi untuk mencoba.', 7000, 'error');
+    }finally{
+        card.classList.remove('busy');
+        setTimeout(() => { if (!card.classList.contains('busy')) bar.style.width = '0'; }, 1500);
+    }
+}
+
 document.querySelectorAll('.apps .app-card').forEach(card => {
     const kind = card.dataset.kind || 'File';
     const sub  = card.querySelector('.app-sub');
     const href = card.getAttribute('href');
+    const name = card.getAttribute('download') || href;
 
-    // Cek file ada atau tidak + tampilkan ukuran (hanya saat dibuka dari server, bukan file lokal)
+    // Cek file ada atau tidak + tampilkan ukuran
     if (location.protocol.startsWith('http')){
         fetch(href, { method:'HEAD', cache:'no-store' })
             .then(r => {
@@ -416,20 +560,27 @@ document.querySelectorAll('.apps .app-card').forEach(card => {
                 const size = formatSize(Number(r.headers.get('content-length')));
                 sub.textContent = kind + (size ? ' · ' + size : '') + ' · klik untuk download';
             })
-            .catch(() => { /* biarkan teks bawaan */ });
+            .catch(() => {});
     }
 
-    card.addEventListener('click', () => {
+    card.addEventListener('click', e => {
         if (isIOS && /\.apk$/i.test(href)){
+            e.preventDefault();
             showToast('File APK hanya bisa dipasang di HP Android.', 5000);
             return;
         }
-        if (/\.apk$/i.test(href)){
-            showToast('Download dimulai. Setelah selesai, buka file dari notifikasi atau folder Download, lalu izinkan "Instal aplikasi tidak dikenal" bila diminta.', 7000);
-        } else {
-            showToast('Download dimulai. File RAR perlu diekstrak dulu dengan aplikasi seperti ZArchiver.', 6000);
+
+        // Di dalam WebView / aplikasi (Stock Count, WhatsApp, dll.) file hasil unduhan halaman
+        // tidak bisa disimpan, jadi biarkan Android yang mengunduh. Notifikasi selesai
+        // akan muncul di bar notifikasi HP dari Android sendiri.
+        if (isInApp || !location.protocol.startsWith('http') || !window.fetch || !window.Blob){
+            showToast('Download dimulai. Tanda "Download selesai" akan muncul di bar notifikasi HP. ' + afterDoneHint(name), 8000);
+            return;
         }
-        // Tidak memanggil preventDefault: browser / WebView yang menangani download.
+
+        e.preventDefault();
+        askNotifyPermission();
+        downloadWithProgress(card);
     });
 });
 </script>
