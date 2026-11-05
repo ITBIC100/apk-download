@@ -12,7 +12,7 @@
     margin:0;
     padding:0;
     box-sizing:border-box;
-    font-family:'Poppins',sans-serif;
+    font-family:'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 }
 
 body{
@@ -46,7 +46,6 @@ body{
     align-items:flex-end;
     gap:8px;
 }
-
 .time h1{
     font-size:44px;
     font-weight:600;
@@ -54,18 +53,13 @@ body{
     color:#111;
     font-variant-numeric:tabular-nums;
 }
-
 .time .pink{ color:#ff5db1; }
 .time .blue{ color:#31b7ff; }
-
 .time .colon{
     color:#bbb;
     animation:blink 1s steps(1) infinite;
 }
-
-@keyframes blink{
-    50%{ opacity:0; }
-}
+@keyframes blink{ 50%{ opacity:0; } }
 
 .date{
     margin-bottom:4px;
@@ -73,7 +67,6 @@ body{
     color:#666;
     line-height:1.2;
 }
-
 .date strong{ color:#555; }
 
 /* ===== GLASS ===== */
@@ -97,10 +90,51 @@ body{
     font-size:12px;
     color:#666;
 }
-
 .weather .seconds{
     font-variant-numeric:tabular-nums;
     color:#999;
+}
+
+/* ===== PERINGATAN IN-APP BROWSER / WEBVIEW ===== */
+.inapp{
+    display:none;
+    margin-top:15px;
+    padding:12px 14px;
+    border-radius:12px;
+    font-size:12px;
+    color:#5a4300;
+    background:rgba(255,214,102,.35);
+    border:1px solid rgba(255,190,40,.6);
+    line-height:1.45;
+}
+.inapp.show{ display:block; }
+.inapp-actions{
+    margin-top:10px;
+    display:flex;
+    gap:8px;
+}
+.inapp-actions a,
+.inapp-actions button{
+    flex:1;
+    min-height:38px;
+    border-radius:10px;
+    border:0;
+    font-size:12px;
+    font-weight:500;
+    cursor:pointer;
+    text-decoration:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.btn-chrome{
+    background:linear-gradient(135deg,#ff5db1,#31b7ff);
+    color:#fff;
+}
+.btn-copy{
+    background:#fff;
+    color:#444;
+    border:1px solid #ddd !important;
 }
 
 /* ===== TOMBOL DOWNLOAD ===== */
@@ -121,31 +155,26 @@ body{
     text-decoration:none;
     cursor:pointer;
     transition:transform .15s ease, box-shadow .15s ease;
+    -webkit-tap-highlight-color:transparent;
 }
-
 .app-card:hover{
     transform:translateY(-2px);
     box-shadow:
         0 10px 22px rgba(0,0,0,.12),
         inset 0 1px 1px rgba(255,255,255,.9);
 }
-
 .app-card:active{ transform:scale(.98); }
-
 .app-card:focus-visible{
     outline:2px solid #31b7ff;
     outline-offset:2px;
 }
-
-.app-icon{
-    font-size:26px;
-    flex-shrink:0;
+.app-card.missing{
+    opacity:.55;
+    pointer-events:none;
 }
 
-.app-info{
-    flex:1;
-    min-width:0;
-}
+.app-icon{ font-size:26px; flex-shrink:0; }
+.app-info{ flex:1; min-width:0; }
 
 .app-title{
     font-size:14px;
@@ -155,7 +184,6 @@ body{
     overflow:hidden;
     text-overflow:ellipsis;
 }
-
 .app-sub{
     font-size:11px;
     color:#777;
@@ -176,13 +204,31 @@ body{
     box-shadow:0 4px 10px rgba(49,183,255,.35);
 }
 
-.footer-card{
-    margin-top:12px;
+.footer-card{ margin-top:12px; }
+
+/* ===== PETUNJUK INSTAL (toast) ===== */
+.toast{
+    position:fixed;
+    left:50%;
+    bottom:20px;
+    transform:translate(-50%,120%);
+    width:calc(100% - 40px);
+    max-width:340px;
+    padding:12px 14px;
+    border-radius:12px;
+    background:rgba(30,30,40,.92);
+    color:#fff;
+    font-size:12px;
+    line-height:1.45;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+    transition:transform .25s ease;
+    z-index:10;
 }
+.toast.show{ transform:translate(-50%,0); }
 
 @media (prefers-reduced-motion: reduce){
     .time .colon{ animation:none; }
-    .app-card{ transition:none; }
+    .app-card, .toast{ transition:none; }
 }
 
 @media(max-width:380px){
@@ -202,7 +248,6 @@ body{
             <span class="pink" id="hour">--</span><span class="colon">:</span><span class="blue" id="minute">--</span>
             <span id="ampm">--</span>
         </h1>
-
         <div class="date">
             <strong id="day">-</strong><br>
             <span id="date">-</span>
@@ -214,12 +259,29 @@ body{
         <span class="seconds" id="fulltime"></span>
     </div>
 
-    <!-- Tombol download file dari GitHub -->
+    <!-- Muncul hanya jika halaman dibuka di dalam aplikasi (WebView / WhatsApp / IG / FB) -->
+    <div class="inapp" id="inapp">
+        Halaman ini terbuka di dalam aplikasi. Jika download tidak berjalan,
+        buka halaman ini di Chrome.
+        <div class="inapp-actions">
+            <a class="btn-chrome" id="openChrome" href="#">Buka di Chrome</a>
+            <button class="btn-copy" id="copyLink" type="button">Salin link</button>
+        </div>
+    </div>
+
+    <!--
+        PENTING: link memakai path RELATIF (file ada di repo yang sama dengan index.html),
+        sehingga file diambil dari itbic100.github.io (satu domain dengan halaman ini).
+        - Atribut "download" hanya berfungsi untuk link satu domain.
+        - GitHub Pages mengirim APK dengan tipe application/vnd.android.package-archive,
+          sehingga HP / WebView menyimpan file sebagai .apk (bukan .bin).
+    -->
     <div class="apps">
 
         <a class="app-card glass"
-           href="https://github.com/ITBIC100/apk-download/raw/main/apk%20sonas.rar"
-           download="apk sonas.rar">
+           href="apk%20sonas.rar"
+           download="apk sonas.rar"
+           data-kind="Arsip RAR">
             <div class="app-icon">🐦</div>
             <div class="app-info">
                 <div class="app-title">apk sonas.rar</div>
@@ -229,8 +291,9 @@ body{
         </a>
 
         <a class="app-card glass"
-           href="https://github.com/ITBIC100/apk-download/raw/main/asc_try_1_1.0.apk"
-           download="asc_try_1_1.0.apk">
+           href="asc_try_1_1.0.apk"
+           download="asc_try_1_1.0.apk"
+           data-kind="APK Android">
             <div class="app-icon">🐦</div>
             <div class="app-info">
                 <div class="app-title">asc_try_1_1.0.apk</div>
@@ -240,8 +303,9 @@ body{
         </a>
 
         <a class="app-card glass"
-           href="https://github.com/ITBIC100/apk-download/raw/main/sonas%20v1.0.0_1_1.0.apk"
-           download="sonas v1.0.0_1_1.0.apk">
+           href="sonas%20v1.0.0_1_1.0.apk"
+           download="sonas v1.0.0_1_1.0.apk"
+           data-kind="APK Android">
             <div class="app-icon">🐦</div>
             <div class="app-info">
                 <div class="app-title">sonas v1.0.0_1_1.0.apk</div>
@@ -264,10 +328,12 @@ body{
 
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
+/* ================= JAM ================= */
 const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 function pad(n){ return String(n).padStart(2,'0'); }
 
 function updateClock(){
@@ -275,7 +341,6 @@ function updateClock(){
     let h = now.getHours();
     const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
-
     document.getElementById('hour').textContent   = pad(h);
     document.getElementById('minute').textContent = pad(now.getMinutes());
     document.getElementById('ampm').textContent   = ampm;
@@ -284,9 +349,89 @@ function updateClock(){
     document.getElementById('fulltime').textContent =
         pad(h) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds()) + ' ' + ampm;
 }
-
 updateClock();
 setInterval(updateClock, 1000);
+
+/* ================= DETEKSI HP & IN-APP BROWSER ================= */
+const ua        = navigator.userAgent || '';
+const isAndroid = /Android/i.test(ua);
+const isIOS     = /iPhone|iPad|iPod/i.test(ua);
+// "; wv)" = Android WebView (termasuk aplikasi Stock Count), plus browser bawaan WA/IG/FB/Line/Telegram/TikTok
+const isInApp   = /; wv\)|WhatsApp|FBAN|FBAV|Instagram|Line\/|Telegram|musical_ly|TikTok/i.test(ua);
+
+const pageUrl = location.href.split('#')[0];
+
+if (isInApp && isAndroid){
+    const box = document.getElementById('inapp');
+    box.classList.add('show');
+
+    // intent:// membuka halaman yang sama di Chrome (fallback: browser default)
+    const noScheme = pageUrl.replace(/^https?:\/\//, '');
+    document.getElementById('openChrome').href =
+        'intent://' + noScheme +
+        '#Intent;scheme=https;package=com.android.chrome;' +
+        'S.browser_fallback_url=' + encodeURIComponent(pageUrl) + ';end';
+
+    document.getElementById('copyLink').addEventListener('click', async () => {
+        try{
+            await navigator.clipboard.writeText(pageUrl);
+            showToast('Link disalin. Tempel di Chrome untuk download.');
+        }catch(e){
+            prompt('Salin link ini lalu buka di Chrome:', pageUrl);
+        }
+    });
+}
+
+/* ================= TOAST PETUNJUK ================= */
+let toastTimer;
+function showToast(msg, ms){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms || 4000);
+}
+
+/* ================= KARTU DOWNLOAD ================= */
+function formatSize(bytes){
+    if (!bytes) return '';
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1 ? mb.toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+}
+
+document.querySelectorAll('.apps .app-card').forEach(card => {
+    const kind = card.dataset.kind || 'File';
+    const sub  = card.querySelector('.app-sub');
+    const href = card.getAttribute('href');
+
+    // Cek file ada atau tidak + tampilkan ukuran (hanya saat dibuka dari server, bukan file lokal)
+    if (location.protocol.startsWith('http')){
+        fetch(href, { method:'HEAD', cache:'no-store' })
+            .then(r => {
+                if (!r.ok){
+                    card.classList.add('missing');
+                    sub.textContent = kind + ' · file tidak ditemukan di server';
+                    return;
+                }
+                const size = formatSize(Number(r.headers.get('content-length')));
+                sub.textContent = kind + (size ? ' · ' + size : '') + ' · klik untuk download';
+            })
+            .catch(() => { /* biarkan teks bawaan */ });
+    }
+
+    card.addEventListener('click', () => {
+        if (isIOS && /\.apk$/i.test(href)){
+            showToast('File APK hanya bisa dipasang di HP Android.', 5000);
+            return;
+        }
+        if (/\.apk$/i.test(href)){
+            showToast('Download dimulai. Setelah selesai, buka file dari notifikasi atau folder Download, lalu izinkan "Instal aplikasi tidak dikenal" bila diminta.', 7000);
+        } else {
+            showToast('Download dimulai. File RAR perlu diekstrak dulu dengan aplikasi seperti ZArchiver.', 6000);
+        }
+        // Tidak memanggil preventDefault: browser / WebView yang menangani download.
+    });
+});
 </script>
 
 </body>
